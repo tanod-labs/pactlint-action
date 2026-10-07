@@ -1,0 +1,129 @@
+name: pactlint by Tanod
+description: Solidity security scanning with Slither and the Tanod DeFi detectors. Writes SARIF, a job summary, and can fail the build on findings.
+author: Tanod
+branding:
+  icon: shield
+  color: blue
+
+inputs:
+  target:
+    description: Path Slither analyses (a Foundry/Hardhat project root or a single .sol file).
+    required: false
+    default: "."
+  solc-version:
+    description: solc version to install and use (for example 0.8.28). Required for single .sol files; if empty, the project framework picks the compiler.
+    required: false
+    default: ""
+  fail-on:
+    description: Fail the step if any finding has impact at or above this level (high, medium, low, none).
+    required: false
+    default: "high"
+  detectors:
+    description: '"tanod" runs only the 9 Tanod detectors; "all" runs Slither built-in detectors plus Tanod.'
+    required: false
+    default: "tanod"
+  sarif:
+    description: Path to write the SARIF report to.
+    required: false
+    default: "pactlint.sarif"
+  slither-args:
+    description: Extra arguments appended to the slither command (whitespace separated, no shell quoting).
+    required: false
+    default: ""
+  python-version:
+    description: Python version used to run Slither.
+    required: false
+    default: "3.11"
+  detectors-ref:
+    description: Git ref of tanod-labs/slither-detectors to install.
+    required: false
+    default: "v0.1.0"
+
+outputs:
+  findings:
+    description: Total number of findings.
+    value: ${{ steps.summarize.outputs.findings }}
+  high:
+    description: Number of High impact findings.
+    value: ${{ steps.summarize.outputs.high }}
+  medium:
+    description: Number of Medium impact findings.
+    value: ${{ steps.summarize.outputs.medium }}
+  sarif:
+    description: Path of the SARIF file.
+    value: ${{ steps.summarize.outputs.sarif }}
+
+runs:
+  using: composite
+  steps:
+    - name: Validate inputs
+      shell: bash
+      env:
+        IN_FAIL_ON: ${{ inputs.fail-on }}
+        IN_DETECTORS: ${{ inputs.detectors }}
+        IN_SOLC: ${{ inputs.solc-version }}
+      run: |
+        case "$IN_FAIL_ON" in high|medium|low|none) ;; *) echo "::error::fail-on must be one of high, medium, low, none (got '$IN_FAIL_ON')"; exit 2;; esac
+        case "$IN_DETECTORS" in tanod|all) ;; *) echo "::error::detectors must be 'tanod' or 'all' (got '$IN_DETECTORS')"; exit 2;; esac
+        if [ -n "$IN_SOLC" ] && ! printf '%s' "$IN_SOLC" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+          echo "::error::solc-version must look like 0.8.28 (got '$IN_SOLC')"; exit 2
+        fi
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install Slither and the Tanod detectors
+      shell: bash
+      env:
+        IN_DETECTORS_REF: ${{ inputs.detectors-ref }}
+      run: |
+        python -m pip install --disable-pip-version-check --quiet "slither-analyzer==0.11.6" solc-select
+        python -m pip install --disable-pip-version-check --quiet "git+https://github.com/tanod-labs/slither-detectors@${IN_DETECTORS_REF}"
+
+    - name: Install solc
+      if: ${{ inputs.solc-version != '' }}
+      shell: bash
+      env:
+        IN_SOLC: ${{ inputs.solc-version }}
+      run: |
+        solc-select install "$IN_SOLC"
+
+    - name: Run Slither
+      shell: bash
+      env:
+        IN_TARGET: ${{ inputs.target }}
+        IN_SOLC: ${{ inputs.solc-version }}
+        IN_DETECTORS: ${{ inputs.detectors }}
+        IN_SARIF: ${{ inputs.sarif }}
+        IN_SLITHER_ARGS: ${{ inputs.slither-args }}
+      run: |
+        if [ -n "$IN_SOLC" ]; then export SOLC_VERSION="$IN_SOLC"; fi
+        JSON_OUT="${RUNNER_TEMP}/pactlint-slither.json"
+        rm -f "$JSON_OUT" "$IN_SARIF"
+        mkdir -p "$(dirname "$IN_SARIF")"
+        ARGS=("$IN_TARGET" --json "$JSON_OUT" --sarif "$IN_SARIF")
+        if [ "$IN_DETECTORS" = "tanod" ]; then
+          ARGS+=(--detect "erc20-unsafe-transfer,amm-spot-price,swap-zero-min-out,swap-deadline,unsafe-downcast,erc4626-inflation,ecrecover-zero-address,signature-replay,chainlink-stale-price")
+        fi
+        if [ -n "$IN_SLITHER_ARGS" ]; then
+          read -r -a EXTRA <<< "$IN_SLITHER_ARGS"
+          ARGS+=("${EXTRA[@]}")
+        fi
+        # Slither exits non-zero when it reports findings. Real crashes are
+        # detected afterwards from the JSON output (missing file or success=false).
+        set +e
+        slither "${ARGS[@]}"
+        echo "slither exit code: $?"
+        set -e
+
+    - name: Summarize
+      id: summarize
+      shell: bash
+      env:
+        IN_FAIL_ON: ${{ inputs.fail-on }}
+        IN_SARIF: ${{ inputs.sarif }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        python "$ACTION_PATH/scripts/summarize.py" --json "${RUNNER_TEMP}/pactlint-slither.json" --fail-on "$IN_FAIL_ON" --sarif "$IN_SARIF"
