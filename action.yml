@@ -1,5 +1,5 @@
 name: pactlint by Tanod
-description: Solidity security scanning with Slither and the Tanod DeFi detectors. Writes SARIF, a job summary, and can fail the build on findings.
+description: Solidity security scan with Slither and nine DeFi detectors. SARIF, job summary, fail-on threshold.
 author: Tanod
 branding:
   icon: shield
