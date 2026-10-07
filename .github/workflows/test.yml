@@ -1,0 +1,90 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install pytest
+      - run: python -m pytest -q tests
+
+  vulnerable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan vulnerable fixture
+        id: scan
+        uses: ./
+        with:
+          target: test/fixtures/amm_spot_price_vulnerable.sol
+          solc-version: "0.8.28"
+          fail-on: none
+          sarif: out/vulnerable.sarif
+      - name: Assert findings were reported
+        env:
+          FINDINGS: ${{ steps.scan.outputs.findings }}
+          SARIF: ${{ steps.scan.outputs.sarif }}
+        run: |
+          echo "findings=$FINDINGS sarif=$SARIF"
+          test "$FINDINGS" -gt 0
+          test -s "$SARIF"
+      - name: Scan every vulnerable fixture (detectors=all)
+        id: all
+        uses: ./
+        with:
+          target: test/fixtures/erc20_unsafe_transfer_vulnerable.sol
+          solc-version: "0.8.28"
+          fail-on: none
+          detectors: all
+          sarif: out/all.sarif
+      - name: Assert findings with detectors=all
+        env:
+          FINDINGS: ${{ steps.all.outputs.findings }}
+        run: test "$FINDINGS" -gt 0
+
+  fixed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan fixed fixture
+        id: scan
+        uses: ./
+        with:
+          target: test/fixtures/erc20_unsafe_transfer_fixed.sol
+          solc-version: "0.8.28"
+          fail-on: high
+          sarif: out/fixed.sarif
+      - name: Assert no findings
+        env:
+          FINDINGS: ${{ steps.scan.outputs.findings }}
+        run: test "$FINDINGS" -eq 0
+
+  fail-on:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan with fail-on high (expected to fail)
+        id: gate
+        continue-on-error: true
+        uses: ./
+        with:
+          target: test/fixtures/amm_spot_price_vulnerable.sol
+          solc-version: "0.8.28"
+          fail-on: high
+          sarif: out/gate.sarif
+      - name: Assert the gate failed the step
+        env:
+          OUTCOME: ${{ steps.gate.outcome }}
+        run: |
+          echo "outcome=$OUTCOME"
+          test "$OUTCOME" = "failure"
