@@ -122,3 +122,8 @@ For a triaged report of a deployed contract or a single file, see [tanod.dev](ht
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+
+## The same scanner as an API or MCP tool
+
+Outside CI, pactlint is also a hosted API: `POST https://tanod.dev/v1/scan/source` (Solidity source) or `/v1/scan/address` (a verified contract on Ethereum or Base), USD 0.25 per scan in USDC over x402, with 3 free scans per IP per day via the header `X-Tanod-Free: 1`. For agents there is the MCP tool `scan_contract_source` at `https://tanod.dev/mcp/security`, and a pre-transaction address check, `check_contract_before_interaction`, for the moment right before a transfer, approval or buy. Details: https://tanod.dev/mcp-servers/
