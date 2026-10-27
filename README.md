@@ -117,13 +117,10 @@ Pinned versions: Slither 0.11.6. The detectors are installed from `tanod-labs/sl
 
 ## Hosted triage
 
-For a triaged report of a deployed contract or a single file, see [tanod.dev](https://tanod.dev) (paid per call via x402).
+Outside CI, use `POST https://tanod.dev/v1/scan/source` for Solidity source or `POST https://tanod.dev/v1/scan/address` for a verified contract on Ethereum or Base. Hosted scans cost USD 0.25 up to 3,000 nSLOC or USD 0.75 up to 15,000 nSLOC, paid in USDC over x402. Three scans per IP per day are free with `X-Tanod-Free: 1`; the allowance resets on the API's UTC day boundary. [Live prices and limits](https://tanod.dev/openapi.json).
+
+Agents can use `scan_contract_source` at [the security MCP endpoint](https://tanod.dev/mcp/security). For a pre-transaction address check, see `check_contract_before_interaction` in the [MCP guide](https://tanod.dev/mcp-servers/). Hosted results are heuristic, not an audit.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
-
-
-## The same scanner as an API or MCP tool
-
-Outside CI, pactlint is also a hosted API: `POST https://tanod.dev/v1/scan/source` (Solidity source) or `/v1/scan/address` (a verified contract on Ethereum or Base), USD 0.25 per scan in USDC over x402, with 3 free scans per IP per day via the header `X-Tanod-Free: 1`. For agents there is the MCP tool `scan_contract_source` at `https://tanod.dev/mcp/security`, and a pre-transaction address check, `check_contract_before_interaction`, for the moment right before a transfer, approval or buy. Details: https://tanod.dev/mcp-servers/
+Open source (MIT). See [LICENSE](LICENSE).
